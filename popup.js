@@ -8,9 +8,26 @@ let accessToken = null;
 let pickerInited = false;
 let tokenClient = null;
 
-// -- Initialize Picker and Identity Services --
-window.onload = () => {
-  // Load Google Picker API
+function setStatus(msg) {
+  document.getElementById('status').innerText = msg;
+}
+
+// Wait until all Google APIs are loaded
+function ready(fn) {
+  if (
+    window.gapi && gapi.load &&
+    window.google && google.accounts && google.accounts.oauth2 &&
+    window.google.picker
+  ) {
+    fn();
+  } else {
+    setTimeout(() => ready(fn), 50);
+  }
+}
+
+// Main logic (waits until APIs are loaded)
+ready(() => {
+  // Load Picker
   gapi.load('picker', { callback: () => { pickerInited = true; } });
 
   // Set up OAuth token client
@@ -36,7 +53,7 @@ window.onload = () => {
       tokenClient.requestAccessToken();
     }
   };
-};
+});
 
 // -- Show Picker Dialog --
 function showPicker() {
@@ -61,9 +78,4 @@ function pickerCallback(data) {
   } else if (data.action === google.picker.Action.CANCEL) {
     setStatus('Upload canceled.');
   }
-}
-
-// -- Helper: Set Status Message --
-function setStatus(msg) {
-  document.getElementById('status').innerText = msg;
 }
