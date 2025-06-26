@@ -1,7 +1,18 @@
 document.getElementById('upload-btn').onclick = function() {
-  // This is a placeholder! Add your upload logic if needed, or just open your Drive folder.
+  // Placeholder: just open the Drive folder in a new tab.
   window.open('https://drive.google.com/drive/folders/135BPvCXeRAXDOEMAlenWzoicRmtn_e_7', '_blank');
   document.getElementById('status').innerText = "Drive folder opened in new tab.";
+};
+
+document.getElementById('trigger-index-btn').onclick = async function() {
+  const status = document.getElementById('status');
+  status.innerText = "Triggering index update...";
+  try {
+    await fetch('https://script.google.com/macros/s/AKfycbxeEU03qJoe0r8f2MR1ZxORvGadUld8LfVNfemkotbAnpneJ9r-G4OwAfK1_Mq_e0QE/exec', { method: 'POST' });
+    status.innerText = "Index update triggered!";
+  } catch (e) {
+    status.innerText = "Error triggering index update!";
+  }
 };
 
 document.getElementById('reminder-btn').onclick = function() {
