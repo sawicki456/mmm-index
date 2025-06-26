@@ -8,9 +8,12 @@
 
   <!-- Google Identity Services (GIS) - for OAuth token client -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <!-- Google APIs (core gapi.client and for Picker) -->
+  
+  <!-- Google APIs (core gapi.client) -->
   <script src="https://apis.google.com/js/api.js"></script>
-  <script src="https://apis.google.com/js/api/picker.js"></script>
+  
+  <!-- Google Picker specific API -->
+  <script src="https://apis.google.com/js/api/picker.js"></script> 
   
   <style>
     body {
@@ -85,9 +88,9 @@
 
     // --- State Variables ---
     let accessToken = null;
-    let pickerLoaded = false;
     let driveClientLoaded = false;
-    let tokenClientInitialized = false; // NEW: Track GIS token client init status
+    let tokenClientInitialized = false; 
+    let pickerApiFullyLoaded = false; // NEW: Flag for when google.picker is fully ready
     let tokenClient; 
 
     // --- DOM Elements ---
@@ -101,25 +104,26 @@
       const now = new Date().toLocaleTimeString();
       statusDiv.innerText = `[${now}] ${msg}`;
       statusDiv.classList.toggle('error', isError); 
-      if (isError) console.error(msg); // Log errors to console for easier debugging
-      else console.log(msg); // Log success/info messages
+      if (isError) console.error(msg);
+      else console.log(msg);
     }
 
     // --- Google API Loading Queue ---
-    // Use a promise-based approach to ensure all components are loaded in order
+    // Ensure all Google API components are loaded in order
     async function initGoogleAPIs() {
         setStatus("Initializing Google APIs...");
         
         try {
-            // Load core gapi client and picker
-            await new Promise(resolve => gapi.load('client:picker', resolve));
-            pickerLoaded = true;
-
-            // Load Drive API client
+            // Load core gapi client and Drive client
+            await new Promise(resolve => gapi.load('client', resolve));
             await gapi.client.load('drive', 'v3');
             driveClientLoaded = true;
 
-            // Initialize GIS token client (will use global 'google.accounts.oauth2')
+            // Load Picker API (this is usually what populates google.picker object)
+            await new Promise(resolve => gapi.load('picker', resolve));
+            pickerApiFullyLoaded = true; // Set flag when picker is fully loaded
+
+            // Initialize GIS token client
             tokenClient = google.accounts.oauth2.initTokenClient({
                 client_id: CLIENT_ID,
                 scope: SCOPE,
@@ -127,8 +131,7 @@
                     if (tokenResponse && tokenResponse.access_token) {
                         accessToken = tokenResponse.access_token;
                         setStatus("Google Drive session active. Ready for uploads.");
-                        // If picker was the reason auth was requested, show it now
-                        if (window.pendingPickerOpen) {
+                        if (window.pendingPickerOpen) { // Check if picker was requested before auth
                            window.pendingPickerOpen = false;
                            showFolderPicker(); 
                         }
@@ -140,7 +143,7 @@
             tokenClientInitialized = true; // Mark as initialized
 
             setStatus("All Google APIs loaded and initialized!");
-            console.log("Full gapi and google.accounts objects available.");
+            console.log("Full GAPI, GIS, and Picker APIs ready.");
 
         } catch (e) {
             setStatus(`Critical: Failed to load Google APIs: ${e.message}`, true);
@@ -148,13 +151,13 @@
         }
     }
 
-    // --- Main Logic (runs after HTML is loaded and gapi/GIS is initialized) ---
+    // --- Main Logic (runs after HTML is loaded, then triggers API loading) ---
     window.onload = () => {
-        initGoogleAPIs(); // Start loading all Google APIs
+        initGoogleAPIs(); // Start loading all Google APIs immediately
         
         // --- Event Listeners for Buttons ---
         uploadBtn.onclick = () => {
-            if (!tokenClientInitialized || !pickerLoaded || !driveClientLoaded) {
+            if (!tokenClientInitialized || !pickerApiFullyLoaded || !driveClientLoaded) {
                 setStatus('Google APIs are still loading. Please wait a moment and try again.', true);
                 return;
             }
@@ -162,9 +165,8 @@
             if (accessToken) {
                 showFolderPicker();
             } else {
-                // Set a flag to indicate we need to open picker after auth
                 window.pendingPickerOpen = true; 
-                tokenClient.requestAccessToken(); // This will trigger the OAuth popup
+                tokenClient.requestAccessToken(); 
             }
         };
 
@@ -190,7 +192,8 @@
 
     // Step 1: Show the Folder Picker dialog to select or create a target folder for upload
     function showFolderPicker() {
-      if (!pickerLoaded || !accessToken) { // Check pickerLoaded, not pickerInited (which is for gapi.load callback)
+      // Use pickerApiFullyLoaded flag for readiness check
+      if (!pickerApiFullyLoaded || !accessToken) { 
         setStatus('Google Picker not fully loaded or no access token. Please try again.', true);
         return;
       }
