@@ -23,6 +23,9 @@
   <button class="menu-btn" id="reminder-btn">Copy Consistency Reminder</button>
   <div id="status"></div>
   <script>
+    // Timestamp for debug/build tracking
+    console.log('POPUP.JS LOADED:', new Date().toISOString());
+
     // --- CONFIGURATION ---
     const CLIENT_ID = '705073291364-vepbigh687lpkg1qjosupk9961nbnagd.apps.googleusercontent.com';
     const DEVELOPER_KEY = 'AIzaSyCbNx0M5dMLY-51grw45LJRLjfC_f8eniA';
@@ -55,7 +58,7 @@
         callback: (tokenResponse) => {
           if (tokenResponse && tokenResponse.access_token) {
             accessToken = tokenResponse.access_token;
-            showPicker();
+            showFolderPicker();
           }
         },
       });
@@ -64,9 +67,9 @@
       gapi.load('client', {callback: loadPickerApi});
 
       document.getElementById('upload-btn').onclick = () => {
-        document.getElementById('status').innerText = 'Loading Google Picker...';
+        document.getElementById('status').innerText = 'Select target folder...';
         if (accessToken) {
-          showPicker();
+          showFolderPicker();
         } else {
           tokenClient.requestAccessToken();
         }
@@ -90,23 +93,45 @@
       };
     });
 
-    // Show the Picker dialog with full folder browse+upload capability
-    function showPicker() {
+    // Step 1: Show the Folder Picker dialog to select target folder
+    function showFolderPicker() {
       if (!pickerInited || !accessToken) {
         document.getElementById('status').innerText = 'Google Picker not ready.';
         return;
       }
       const folderView = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
-        .setParent(ROOT_FOLDER_ID)
         .setIncludeFolders(true)
-        .setSelectFolderEnabled(true);
-      const uploadView = new google.picker.DocsUploadView().setParent(ROOT_FOLDER_ID);
+        .setSelectFolderEnabled(true)
+        .setParent(ROOT_FOLDER_ID);
 
       const picker = new google.picker.PickerBuilder()
         .setAppId(APP_ID)
         .setOAuthToken(accessToken)
         .setDeveloperKey(DEVELOPER_KEY)
         .addView(folderView)
+        .setCallback(folderPickerCallback)
+        .build();
+      picker.setVisible(true);
+      document.getElementById('status').innerText = 'Choose a folder to upload into.';
+    }
+
+    // Step 2: After folder is selected, show upload dialog for that folder
+    function folderPickerCallback(data) {
+      if (data.action === google.picker.Action.PICKED) {
+        const folderId = data.docs[0].id;
+        showUploadPicker(folderId);
+      } else if (data.action === google.picker.Action.CANCEL) {
+        document.getElementById('status').innerText = 'Folder selection cancelled.';
+      }
+    }
+
+    function showUploadPicker(targetFolderId) {
+      const uploadView = new google.picker.DocsUploadView().setParent(targetFolderId);
+
+      const picker = new google.picker.PickerBuilder()
+        .setAppId(APP_ID)
+        .setOAuthToken(accessToken)
+        .setDeveloperKey(DEVELOPER_KEY)
         .addView(uploadView)
         .setCallback(pickerCallback)
         .build();
@@ -114,6 +139,7 @@
       document.getElementById('status').innerText = '';
     }
 
+    // Standard pickerCallback for upload
     function pickerCallback(data) {
       if (data.action === google.picker.Action.PICKED) {
         const file = data.docs[0];
