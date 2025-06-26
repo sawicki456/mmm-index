@@ -1,9 +1,11 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <title>Macho Hat Uploader</title>
+  <!-- Google Identity Services (OAuth 2.0) -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <!-- Google APIs (for Picker) -->
   <script src="https://apis.google.com/js/api.js"></script>
   <style>
     body { background: #1a1a22; color: #fff; width: 320px; font-family: sans-serif; padding: 24px 0 12px 0; margin: 0; }
@@ -19,6 +21,85 @@
   <button class="menu-btn" id="trigger-index-btn">Trigger Index Update</button>
   <button class="menu-btn" id="reminder-btn">Copy Consistency Reminder</button>
   <div id="status"></div>
-  <script src="popup.js"></script>
+  <script>
+    // --- CONFIGURATION ---
+    const CLIENT_ID = '705073291364-vepbigh687lpkg1qjosupk9961nbnagd.apps.googleusercontent.com';
+    const DEVELOPER_KEY = 'AIzaSyCbNx0M5dMLY-51grw45LJRLjfC_f8eniA';
+    const APP_ID = '705073291364';
+    const SCOPE = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly';
+
+    let pickerInited = false;
+    let tokenClient;
+    let accessToken = null;
+
+    // Picker API loader
+    function loadPickerApi() {
+      gapi.load('picker', {callback: () => { pickerInited = true; }});
+    }
+
+    window.onload = () => {
+      // GIS Init
+      tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: CLIENT_ID,
+        scope: SCOPE,
+        callback: (tokenResponse) => {
+          if (tokenResponse && tokenResponse.access_token) {
+            accessToken = tokenResponse.access_token;
+            showPicker();
+          }
+        },
+      });
+
+      // Picker Init
+      gapi.load('client', {callback: loadPickerApi});
+
+      document.getElementById('upload-btn').onclick = () => {
+        document.getElementById('status').innerText = 'Loading Google Picker...';
+        if (accessToken) {
+          showPicker();
+        } else {
+          tokenClient.requestAccessToken();
+        }
+      };
+
+      document.getElementById('reminder-btn').onclick = () => {
+        const REMINDER = `Review the latest project index and files before generating art or text. Use only canonical character, location, and object references from the index. Ensure all outputs are consistent with existing assets and do not invent or change any details without explicit instruction.`;
+        navigator.clipboard.writeText(REMINDER);
+        document.getElementById('status').innerText = "Reminder copied!";
+      };
+
+      document.getElementById('trigger-index-btn').onclick = () => {
+        // TODO: Add your custom App Script fetch logic here
+        document.getElementById('status').innerText = "Index update triggered! (Add real logic)";
+      };
+    };
+
+    // Show the Picker dialog
+    function showPicker() {
+      if (!pickerInited || !accessToken) {
+        document.getElementById('status').innerText = 'Google Picker not ready.';
+        return;
+      }
+      const picker = new google.picker.PickerBuilder()
+        .setAppId(APP_ID)
+        .setOAuthToken(accessToken)
+        .setDeveloperKey(DEVELOPER_KEY)
+        .addView(google.picker.ViewId.DOCS)
+        .addView(google.picker.ViewId.DOCS_UPLOAD)
+        .setCallback(pickerCallback)
+        .build();
+      picker.setVisible(true);
+      document.getElementById('status').innerText = '';
+    }
+
+    function pickerCallback(data) {
+      if (data.action === google.picker.Action.PICKED) {
+        const file = data.docs[0];
+        document.getElementById('status').innerText = `Uploaded: ${file.name}`;
+      } else if (data.action === google.picker.Action.CANCEL) {
+        document.getElementById('status').innerText = 'Upload cancelled.';
+      }
+    }
+  </script>
 </body>
 </html>
