@@ -74,17 +74,11 @@
 
   <script>
     // --- CONFIGURATION ---
-    // Your Google Cloud OAuth Client ID (from web application credentials)
     const CLIENT_ID = '705073291364-vepbigh687lpkg1qjosupk9961nbnagd.apps.googleusercontent.com';
-    // Your Google Cloud API Key (from API Keys)
     const DEVELOPER_KEY = 'AIzaSyCbNx0M5dMLY-51grw45LJRLjfC_f8eniA';
-    // The numeric part of your CLIENT_ID, used as App ID for Picker
     const APP_ID = '705073291364'; 
-    // The Google Drive folder ID where your project assets are located (root for browsing)
     const ROOT_FOLDER_ID = '135BPvCXeRAXDOEMAlenWzoicRmtn_e_7';
-    // OAuth Scopes: drive.file for files created by app, drive for full Drive access
     const SCOPE = 'https://www.googleapis.com/auth/drive'; 
-    // URL for your Google Apps Script Web App that updates the index
     const INDEX_TRIGGER_URL = 'https://script.google.com/macros/s/AKfycbx_ViRshOUP8y3eR-RbQDX9o2nEGvP7_vLdW_GPLnGE0cdv1jcCU9us7DxUAOO1Fc5N_w/exec';
 
     // --- State Variables ---
@@ -99,31 +93,27 @@
     const statusDiv = document.getElementById('status');
 
     // --- Helper for Status Messages ---
-    // Added isError parameter for styling
     function setStatus(msg, isError = false) {
       const now = new Date().toLocaleTimeString();
       statusDiv.innerText = `[${now}] ${msg}`;
-      statusDiv.classList.toggle('error', isError); // Add/remove 'error' class
+      statusDiv.classList.toggle('error', isError); 
     }
 
     // --- Google API Loader Functions ---
-    // Waits until all required Google API libraries are loaded and ready
     function ready(fn) {
       if (window.google && window.google.picker && window.gapi && window.gapi.load) {
         fn();
       } else {
-        setTimeout(() => ready(fn), 100); // Poll every 100ms
+        setTimeout(() => ready(fn), 100); 
       }
     }
 
-    // Loads the Google Picker API module
     function loadPickerApi() {
       gapi.load('picker', { callback: () => { pickerInited = true; } });
     }
 
-    // --- Main Initialization Logic (Runs when all APIs are ready) ---
+    // --- Main Initialization Logic ---
     ready(() => {
-      // Initialize Google Identity Services (GIS) token client for OAuth
       tokenClient = google.accounts.oauth2.initTokenClient({
         client_id: CLIENT_ID,
         scope: SCOPE,
@@ -131,41 +121,33 @@
           if (tokenResponse && tokenResponse.access_token) {
             accessToken = tokenResponse.access_token;
             setStatus("Google Drive session active. Ready for uploads.");
-            showFolderPicker(); // Auto-show folder picker after successful auth
+            showFolderPicker(); 
           } else {
             setStatus('Authentication failed. Please try again.', true);
           }
         },
       });
 
-      // Load Google API client for Picker (will load `gapi.client`)
       gapi.load('client', { callback: loadPickerApi });
 
-      // --- Event Listeners for Buttons ---
-
-      // Upload Button: Initiates OAuth and then shows the folder picker
       uploadBtn.onclick = () => {
         setStatus('Initiating upload workflow...');
         if (accessToken) {
-          // If already authenticated, directly show folder picker
           showFolderPicker();
         } else {
-          // If not authenticated, request access token (will trigger popup)
           tokenClient.requestAccessToken();
         }
       };
 
-      // Consistency Reminder Button: Copies text to clipboard
       reminderBtn.onclick = () => {
         const REMINDER_TEXT = `Review the latest project index and files before generating art or text. Use only canonical character, location, and object references from the index. Ensure all outputs are consistent with existing assets and do not invent or change any details without explicit instruction.`;
         navigator.clipboard.writeText(REMINDER_TEXT);
         setStatus("Reminder copied to clipboard!");
       };
 
-      // Trigger Index Update Button: Calls Google Apps Script Web App
       triggerIndexBtn.onclick = () => {
-        setStatus("Triggering index update, please wait...");
-        fetch(INDEX_TRIGGER_URL, { method: "POST", mode: "no-cors" }) // Use no-cors for fire-and-forget, no response needed
+        setStatus("Index update triggered, please wait...");
+        fetch(INDEX_TRIGGER_URL, { method: "POST", mode: "no-cors" }) 
           .then(() => {
             setStatus("Index update triggered successfully!");
           })
@@ -177,7 +159,7 @@
 
     // --- Google Picker Functions ---
 
-    // Step 1: Show the Folder Picker dialog to select target folder for upload
+    // Step 1: Show the Folder Picker dialog to select or create a target folder for upload
     function showFolderPicker() {
       if (!pickerInited || !accessToken) {
         setStatus('Google Picker or Access Token not ready. Please try again.', true);
@@ -187,26 +169,30 @@
       const folderView = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
         .setParent(ROOT_FOLDER_ID)
         .setIncludeFolders(true)
-        .setSelectFolderEnabled(true); // Allows selecting a folder
+        .setSelectFolderEnabled(true); 
+      
+      // ADDED: View to explicitly allow creating new folders within the picker
+      const createFolderView = new google.picker.DocsCreateFolderView().setParent(ROOT_FOLDER_ID);
 
       const picker = new google.picker.PickerBuilder()
         .setOAuthToken(accessToken)
         .setDeveloperKey(DEVELOPER_KEY)
         .setAppId(APP_ID)
-        .addView(folderView) // Only show folder view initially
-        .setTitle('Select a Folder to Upload Into')
+        .addView(folderView)
+        .addView(createFolderView) // Add the create folder view
+        .setTitle('Select or Create a Folder for Upload') // Updated title
         .setCallback(folderPickerCallback)
         .build();
       picker.setVisible(true);
-      setStatus('Choose a folder for your upload.');
+      setStatus('Choose or create a folder for your upload.');
     }
 
-    // Callback after user picks a folder
+    // Callback after user picks or creates a folder
     function folderPickerCallback(data) {
       if (data.action === google.picker.Action.PICKED) {
-        const folder = data.docs[0];
+        const folder = data.docs[0]; // This will be the selected or newly created folder
         setStatus(`Selected folder: ${folder.name}. Now pick file(s) to upload.`);
-        // After folder is picked, open the file upload picker for that specific folder
+        // Proceed to upload files to this folder
         promptFileUpload(folder.id); 
       } else if (data.action === google.picker.Action.CANCEL) {
         setStatus('Folder selection cancelled.', true);
@@ -217,10 +203,10 @@
     function promptFileUpload(folderId) {
       const input = document.createElement('input');
       input.type = 'file';
-      input.multiple = true; // Allow multiple file selection
-      input.accept = 'image/*,video/*,application/pdf,text/plain'; // Recommended: Filter by common types
+      input.multiple = true; 
+      input.accept = 'image/*,video/*,application/pdf,text/plain'; 
       input.onchange = async () => {
-        const files = input.files; // Get all selected files
+        const files = input.files; 
         if (files.length === 0) {
           setStatus('No files selected for upload.', true);
           return;
@@ -228,7 +214,6 @@
 
         setStatus(`Uploading ${files.length} file(s) to selected folder...`);
         
-        // Ensure Drive API client is loaded for direct upload (gapi.client.drive)
         try {
           await gapi.client.load('drive', 'v3');
         } catch (e) {
@@ -240,24 +225,20 @@
         let failedCount = 0;
         const uploadPromises = [];
 
-        // Loop through each selected file and upload
         for (let i = 0; i < files.length; i++) {
           const file = files[i];
-          const originalFileName = file.name; // Capture original file name
-          // Prompt for rename for each file (optional, can be removed for batch)
+          const originalFileName = file.name; 
           let newName = prompt(`Rename file ${i + 1}/${files.length} (${originalFileName}):`, originalFileName);
           if (!newName || newName.trim() === "") newName = originalFileName;
 
           const metadata = {
             name: newName,
             parents: [folderId],
-            // ADDED: Custom property to store the original filename
             properties: {
               originalFileName: originalFileName 
             }
           };
 
-          // Google Drive's multipart upload for files (not using Picker's built-in upload anymore here)
           const formData = new FormData();
           formData.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
           formData.append('file', file);
@@ -276,22 +257,18 @@
           .then(val => {
             uploadedCount++;
             setStatus(`Uploaded ${uploadedCount}/${files.length}: ${val.name}`);
-            // You might want to log this successful upload event to your AI_Interactions sheet here
-            // using logAIInteraction function if file is immediately processed by AI.
-            // Example: logAIInteraction(val.id, val.name, "Manual Upload", "Uploaded", "User");
           })
           .catch(e => {
             failedCount++;
-            setStatus(`Failed to upload ${originalFileName}: ${e.message}`, true); // Show original name on error
+            setStatus(`Failed to upload ${originalFileName}: ${e.message}`, true); 
           });
           uploadPromises.push(uploadPromise);
         }
 
-        // Wait for all uploads to complete/fail
         await Promise.allSettled(uploadPromises);
         setStatus(`Batch upload complete! ${uploadedCount} succeeded, ${failedCount} failed.`);
       };
-      input.click(); // Programmatically click the hidden file input
+      input.click(); 
     }
   </script>
 </body>
