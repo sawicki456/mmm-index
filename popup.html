@@ -1,0 +1,23 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Macho Hat Uploader</title>
+  <script src="https://apis.google.com/js/api.js"></script>
+  <style>
+    body { background: #1a1a22; color: #fff; width: 320px; font-family: sans-serif; padding: 24px 0 12px 0; margin: 0; }
+    #hat-img { display: block; margin: 0 auto 20px auto; width: 72px; height: 72px; border-radius: 50%; border: 2px solid #fff; background: #d00; box-shadow: 0 0 12px #222a; }
+    .menu-btn { width: 90%; display: block; margin: 14px auto; font-size: 17px; padding: 14px 0; border: none; border-radius: 12px; background: #36364a; color: #fff; font-weight: bold; cursor: pointer; transition: background 0.15s; }
+    .menu-btn:hover { background: #464666; }
+    #status { margin-top: 12px; text-align: center; font-size: 14px; min-height: 20px; }
+  </style>
+</head>
+<body>
+  <img src="macho_hat.png" id="hat-img" alt="Macho Hat">
+  <button class="menu-btn" id="upload-btn">Upload Art to Google Drive</button>
+  <button class="menu-btn" id="reminder-btn">Copy Consistency Reminder</button>
+  <div id="status"></div>
+  <script src="popup.js"></script>
+</body>
+</html>
