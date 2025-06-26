@@ -11,11 +11,58 @@
   <script src="https://apis.google.com/js/api.js"></script>
   <script src="https://apis.google.com/js/api/picker.js"></script>
   <style>
-    body { background: #1a1a22; color: #fff; width: 320px; font-family: sans-serif; padding: 24px 0 12px 0; margin: 0; }
-    #hat-img { display: block; margin: 0 auto 20px auto; width: 72px; height: 72px; border-radius: 50%; border: 2px solid #fff; background: #d00; box-shadow: 0 0 12px #222a; }
-    .menu-btn { width: 90%; display: block; margin: 14px auto; font-size: 17px; padding: 14px 0; border: none; border-radius: 12px; background: #36364a; color: #fff; font-weight: bold; cursor: pointer; transition: background 0.15s; }
+    body {
+      background: #1a1a22;
+      color: #fff;
+      width: 320px;
+      font-family: sans-serif;
+      padding: 24px 0 12px 0;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh; /* Ensures content is centered vertically */
+      box-sizing: border-box; /* Include padding in width/height */
+    }
+    #hat-img {
+      display: block;
+      margin: 0 auto 20px auto;
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      border: 2px solid #fff;
+      background: #d00;
+      box-shadow: 0 0 12px #222a;
+    }
+    .menu-btn {
+      width: 90%;
+      display: block;
+      margin: 14px auto;
+      font-size: 17px;
+      padding: 14px 0;
+      border: none;
+      border-radius: 12px;
+      background: #36364a;
+      color: #fff;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.15s;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3); /* Softer shadow */
+    }
     .menu-btn:hover { background: #464666; }
-    #status { margin-top: 12px; text-align: center; font-size: 14px; min-height: 20px; }
+    #status {
+      margin-top: 12px;
+      text-align: center;
+      font-size: 14px;
+      min-height: 20px;
+      color: #91ffac; /* Default: green for status */
+      word-break: break-word; /* Prevents overflow for long messages */
+      padding: 0 10px; /* Add some padding */
+    }
+    #status.error {
+        color: #ff6b6b; /* Red for error messages */
+    }
   </style>
 </head>
 <body>
@@ -24,143 +71,227 @@
   <button class="menu-btn" id="trigger-index-btn">Trigger Index Update</button>
   <button class="menu-btn" id="reminder-btn">Copy Consistency Reminder</button>
   <div id="status"></div>
+
   <script>
     // --- CONFIGURATION ---
+    // Your Google Cloud OAuth Client ID (from web application credentials)
     const CLIENT_ID = '705073291364-vepbigh687lpkg1qjosupk9961nbnagd.apps.googleusercontent.com';
+    // Your Google Cloud API Key (from API Keys)
     const DEVELOPER_KEY = 'AIzaSyCbNx0M5dMLY-51grw45LJRLjfC_f8eniA';
-    const APP_ID = '705073291364';
-    const SCOPE = 'https://www.googleapis.com/auth/drive';
+    // The numeric part of your CLIENT_ID, used as App ID for Picker
+    const APP_ID = '705073291364'; 
+    // The Google Drive folder ID where your project assets are located (root for browsing)
+    const ROOT_FOLDER_ID = '135BPvCXeRAXDOEMAlenWzoicRmtn_e_7';
+    // OAuth Scopes: drive.file for files created by app, drive for full Drive access
+    const SCOPE = 'https://www.googleapis.com/auth/drive'; 
+    // URL for your Google Apps Script Web App that updates the index
     const INDEX_TRIGGER_URL = 'https://script.google.com/macros/s/AKfycbx_ViRshOUP8y3eR-RbQDX9o2nEGvP7_vLdW_GPLnGE0cdv1jcCU9us7DxUAOO1Fc5N_w/exec';
 
+    // --- State Variables ---
     let accessToken = null;
     let pickerInited = false;
     let tokenClient = null;
-    let tokenExpiry = null;
 
-    // Helper for status with timestamp
-    function setStatus(msg) {
-      const now = new Date().toLocaleString();
-      document.getElementById('status').innerText = `[${now}] ${msg}`;
+    // --- DOM Elements ---
+    const uploadBtn = document.getElementById('pick-folder-btn');
+    const triggerIndexBtn = document.getElementById('trigger-index-btn');
+    const reminderBtn = document.getElementById('reminder-btn');
+    const statusDiv = document.getElementById('status');
+
+    // --- Helper for Status Messages ---
+    // Added isError parameter for styling
+    function setStatus(msg, isError = false) {
+      const now = new Date().toLocaleTimeString();
+      statusDiv.innerText = `[${now}] ${msg}`;
+      statusDiv.classList.toggle('error', isError); // Add/remove 'error' class
     }
 
-    // Wait until all APIs are loaded (especially google.picker)
+    // --- Google API Loader Functions ---
+    // Waits until all required Google API libraries are loaded and ready
     function ready(fn) {
-      if (window.google && window.google.picker && window.gapi && window.gapi.load) fn();
-      else setTimeout(() => ready(fn), 100);
+      if (window.google && window.google.picker && window.gapi && window.gapi.load) {
+        fn();
+      } else {
+        setTimeout(() => ready(fn), 100); // Poll every 100ms
+      }
     }
 
+    // Loads the Google Picker API module
     function loadPickerApi() {
-      gapi.load('picker', {callback: () => { pickerInited = true; }});
+      gapi.load('picker', { callback: () => { pickerInited = true; } });
     }
 
+    // --- Main Initialization Logic (Runs when all APIs are ready) ---
     ready(() => {
+      // Initialize Google Identity Services (GIS) token client for OAuth
       tokenClient = google.accounts.oauth2.initTokenClient({
         client_id: CLIENT_ID,
         scope: SCOPE,
         callback: (tokenResponse) => {
           if (tokenResponse && tokenResponse.access_token) {
             accessToken = tokenResponse.access_token;
-            // Track expiry (default 1 hour, can check expires_in if present)
-            tokenExpiry = Date.now() + 60 * 60 * 1000;
-            setStatus("Google Drive session active. You can upload multiple files without re-auth.");
-            showFolderPicker();
+            setStatus("Google Drive session active. Ready for uploads.");
+            showFolderPicker(); // Auto-show folder picker after successful auth
+          } else {
+            setStatus('Authentication failed. Please try again.', true);
           }
         },
       });
-      gapi.load('client', {callback: loadPickerApi});
 
-      document.getElementById('pick-folder-btn').onclick = () => {
-        // Optionally: check expiry (skip for now, default 1h is enough)
-        setStatus('Loading folder picker...');
+      // Load Google API client for Picker (will load `gapi.client`)
+      gapi.load('client', { callback: loadPickerApi });
+
+      // --- Event Listeners for Buttons ---
+
+      // Upload Button: Initiates OAuth and then shows the folder picker
+      uploadBtn.onclick = () => {
+        setStatus('Initiating upload workflow...');
         if (accessToken) {
+          // If already authenticated, directly show folder picker
           showFolderPicker();
         } else {
+          // If not authenticated, request access token (will trigger popup)
           tokenClient.requestAccessToken();
         }
       };
 
-      document.getElementById('reminder-btn').onclick = () => {
-        const REMINDER = `Review the latest project index and files before generating art or text. Use only canonical character, location, and object references from the index. Ensure all outputs are consistent with existing assets and do not invent or change any details without explicit instruction.`;
-        navigator.clipboard.writeText(REMINDER);
-        setStatus("Reminder copied!");
+      // Consistency Reminder Button: Copies text to clipboard
+      reminderBtn.onclick = () => {
+        const REMINDER_TEXT = `Review the latest project index and files before generating art or text. Use only canonical character, location, and object references from the index. Ensure all outputs are consistent with existing assets and do not invent or change any details without explicit instruction.`;
+        navigator.clipboard.writeText(REMINDER_TEXT);
+        setStatus("Reminder copied to clipboard!");
       };
 
-      document.getElementById('trigger-index-btn').onclick = () => {
-        setStatus("Index update triggered, please wait...");
-        fetch(INDEX_TRIGGER_URL, { method: "POST", mode: "no-cors" })
+      // Trigger Index Update Button: Calls Google Apps Script Web App
+      triggerIndexBtn.onclick = () => {
+        setStatus("Triggering index update, please wait...");
+        fetch(INDEX_TRIGGER_URL, { method: "POST", mode: "no-cors" }) // Use no-cors for fire-and-forget, no response needed
           .then(() => {
-            setStatus("Index update triggered!");
+            setStatus("Index update triggered successfully!");
           })
-          .catch(() => {
-            setStatus("Error triggering index update!");
+          .catch((e) => {
+            setStatus(`Error triggering index update: ${e.message}`, true);
           });
       };
     });
 
-    // --- Google Picker Folder-Upload Logic ---
+    // --- Google Picker Functions ---
+
+    // Step 1: Show the Folder Picker dialog to select target folder for upload
     function showFolderPicker() {
       if (!pickerInited || !accessToken) {
-        setStatus('Google Picker not ready.');
+        setStatus('Google Picker or Access Token not ready. Please try again.', true);
         return;
       }
+
       const folderView = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
+        .setParent(ROOT_FOLDER_ID)
         .setIncludeFolders(true)
-        .setSelectFolderEnabled(true);
+        .setSelectFolderEnabled(true); // Allows selecting a folder
+
       const picker = new google.picker.PickerBuilder()
         .setOAuthToken(accessToken)
         .setDeveloperKey(DEVELOPER_KEY)
         .setAppId(APP_ID)
-        .addView(folderView)
+        .addView(folderView) // Only show folder view initially
+        .setTitle('Select a Folder to Upload Into')
         .setCallback(folderPickerCallback)
         .build();
       picker.setVisible(true);
-      setStatus('');
+      setStatus('Choose a folder for your upload.');
     }
 
+    // Callback after user picks a folder
     function folderPickerCallback(data) {
       if (data.action === google.picker.Action.PICKED) {
         const folder = data.docs[0];
-        setStatus(`Selected folder: ${folder.name}`);
-        promptFileUpload(folder.id);
+        setStatus(`Selected folder: ${folder.name}. Now pick file(s) to upload.`);
+        // After folder is picked, open the file upload picker for that specific folder
+        promptFileUpload(folder.id); 
       } else if (data.action === google.picker.Action.CANCEL) {
-        setStatus('No folder selected.');
+        setStatus('Folder selection cancelled.', true);
       }
     }
 
+    // Step 2: Prompt user to select file(s) and then handle the upload
     function promptFileUpload(folderId) {
       const input = document.createElement('input');
       input.type = 'file';
-      input.multiple = false; // Change to true for multi-upload, single for now
+      input.multiple = true; // Allow multiple file selection
+      input.accept = 'image/*,video/*,application/pdf,text/plain'; // Recommended: Filter by common types
       input.onchange = async () => {
-        const file = input.files[0];
-        if (!file) return;
-        setStatus('Uploading...');
-        await gapi.client.load('drive', 'v3');
-        const metadata = {
-          name: file.name,
-          parents: [folderId]
-        };
-        const form = new FormData();
-        form.append('metadata', new Blob([JSON.stringify(metadata)], {type: 'application/json'}));
-        form.append('file', file);
+        const files = input.files; // Get all selected files
+        if (files.length === 0) {
+          setStatus('No files selected for upload.', true);
+          return;
+        }
 
-        fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
-          method: 'POST',
-          headers: new Headers({ 'Authorization': 'Bearer ' + accessToken }),
-          body: form,
-        })
-          .then(res => res.json())
+        setStatus(`Uploading ${files.length} file(s) to selected folder...`);
+        
+        // Ensure Drive API client is loaded for direct upload (gapi.client.drive)
+        try {
+          await gapi.client.load('drive', 'v3');
+        } catch (e) {
+          setStatus(`Failed to load Drive API client: ${e.message}`, true);
+          return;
+        }
+
+        let uploadedCount = 0;
+        let failedCount = 0;
+        const uploadPromises = [];
+
+        // Loop through each selected file and upload
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          const originalFileName = file.name; // Capture original file name
+          // Prompt for rename for each file (optional, can be removed for batch)
+          let newName = prompt(`Rename file ${i + 1}/${files.length} (${originalFileName}):`, originalFileName);
+          if (!newName || newName.trim() === "") newName = originalFileName;
+
+          const metadata = {
+            name: newName,
+            parents: [folderId],
+            // ADDED: Custom property to store the original filename
+            properties: {
+              originalFileName: originalFileName 
+            }
+          };
+
+          // Google Drive's multipart upload for files (not using Picker's built-in upload anymore here)
+          const formData = new FormData();
+          formData.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+          formData.append('file', file);
+
+          const uploadPromise = fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+            method: 'POST',
+            headers: new Headers({ 'Authorization': 'Bearer ' + accessToken }),
+            body: formData,
+          })
+          .then(res => {
+            if (!res.ok) {
+              return res.text().then(text => Promise.reject(new Error(`HTTP error! status: ${res.status}, msg: ${text}`)));
+            }
+            return res.json();
+          })
           .then(val => {
-            if (val && val.name)
-              setStatus(`Upload complete: ${val.name}`);
-            else
-              setStatus("Upload failed: Check Drive API permissions or quota.");
+            uploadedCount++;
+            setStatus(`Uploaded ${uploadedCount}/${files.length}: ${val.name}`);
+            // You might want to log this successful upload event to your AI_Interactions sheet here
+            // using logAIInteraction function if file is immediately processed by AI.
+            // Example: logAIInteraction(val.id, val.name, "Manual Upload", "Uploaded", "User");
           })
           .catch(e => {
-            setStatus(`Upload error: ${e}`);
+            failedCount++;
+            setStatus(`Failed to upload ${originalFileName}: ${e.message}`, true); // Show original name on error
           });
+          uploadPromises.push(uploadPromise);
+        }
+
+        // Wait for all uploads to complete/fail
+        await Promise.allSettled(uploadPromises);
+        setStatus(`Batch upload complete! ${uploadedCount} succeeded, ${failedCount} failed.`);
       };
-      input.click();
+      input.click(); // Programmatically click the hidden file input
     }
   </script>
 </body>
