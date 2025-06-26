@@ -8,7 +8,7 @@ document.getElementById('trigger-index-btn').onclick = async function() {
   const status = document.getElementById('status');
   status.innerText = "Triggering index update...";
   try {
-    await fetch('https://script.google.com/macros/s/AKfycbxeEU03qJoe0r8f2MR1ZxORvGadUld8LfVNfemkotbAnpneJ9r-G4OwAfK1_Mq_e0QE/exec', { method: 'POST' });
+    await fetch('https://script.google.com/macros/s/AKfycbx_ViRshOUP8y3eR-RbQDX9o2nEGvP7_vLdW_GPLnGE0cdv1jcCU9us7DxUAOO1Fc5N_w/exec', { method: 'POST' });
     status.innerText = "Index update triggered!";
   } catch (e) {
     status.innerText = "Error triggering index update!";
