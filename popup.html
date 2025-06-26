@@ -3,10 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <title>Macho Hat Uploader</title>
-  <!-- Google Identity Services (OAuth 2.0) -->
+  <!-- Google Identity Services -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <!-- Google APIs (for Picker) -->
+  <!-- Google APIs for Picker -->
   <script src="https://apis.google.com/js/api.js"></script>
+  <script src="https://apis.google.com/js/api/picker.js"></script>
   <style>
     body { background: #1a1a22; color: #fff; width: 320px; font-family: sans-serif; padding: 24px 0 12px 0; margin: 0; }
     #hat-img { display: block; margin: 0 auto 20px auto; width: 72px; height: 72px; border-radius: 50%; border: 2px solid #fff; background: #d00; box-shadow: 0 0 12px #222a; }
@@ -32,12 +33,18 @@
     let tokenClient;
     let accessToken = null;
 
+    // Wait until all APIs are loaded (especially google.picker)
+    function ready(fn) {
+      if (window.google && window.google.picker && window.gapi && window.gapi.load) fn();
+      else setTimeout(() => ready(fn), 100);
+    }
+
     // Picker API loader
     function loadPickerApi() {
       gapi.load('picker', {callback: () => { pickerInited = true; }});
     }
 
-    window.onload = () => {
+    ready(() => {
       // GIS Init
       tokenClient = google.accounts.oauth2.initTokenClient({
         client_id: CLIENT_ID,
@@ -72,7 +79,7 @@
         // TODO: Add your custom App Script fetch logic here
         document.getElementById('status').innerText = "Index update triggered! (Add real logic)";
       };
-    };
+    });
 
     // Show the Picker dialog
     function showPicker() {
