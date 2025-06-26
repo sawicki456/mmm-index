@@ -26,7 +26,7 @@
     // --- CONFIGURATION ---
     const CLIENT_ID = '705073291364-vepbigh687lpkg1qjosupk9961nbnagd.apps.googleusercontent.com';
     const DEVELOPER_KEY = 'AIzaSyCbNx0M5dMLY-51grw45LJRLjfC_f8eniA';
-    const APP_ID = '705073291364';
+    const ROOT_FOLDER_ID = '135BPvCXeRAXDOEMAlenWzoicRmtn_e_7';
     const SCOPE = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly';
 
     let pickerInited = false;
@@ -88,11 +88,10 @@
         return;
       }
       const picker = new google.picker.PickerBuilder()
-        .setAppId(APP_ID)
+        .addView(new google.picker.DocsUploadView().setParent(ROOT_FOLDER_ID))
         .setOAuthToken(accessToken)
         .setDeveloperKey(DEVELOPER_KEY)
-        .addView(google.picker.ViewId.DOCS)
-        .addView(google.picker.ViewId.DOCS_UPLOAD)
+        .setTitle('Upload Art to Google Drive')
         .setCallback(pickerCallback)
         .build();
       picker.setVisible(true);
