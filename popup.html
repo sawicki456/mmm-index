@@ -35,6 +35,7 @@
     let accessToken = null;
     let pickerInited = false;
     let tokenClient = null;
+    let tokenExpiry = null;
 
     // Helper for status with timestamp
     function setStatus(msg) {
@@ -59,6 +60,9 @@
         callback: (tokenResponse) => {
           if (tokenResponse && tokenResponse.access_token) {
             accessToken = tokenResponse.access_token;
+            // Track expiry (default 1 hour, can check expires_in if present)
+            tokenExpiry = Date.now() + 60 * 60 * 1000;
+            setStatus("Google Drive session active. You can upload multiple files without re-auth.");
             showFolderPicker();
           }
         },
@@ -66,6 +70,7 @@
       gapi.load('client', {callback: loadPickerApi});
 
       document.getElementById('pick-folder-btn').onclick = () => {
+        // Optionally: check expiry (skip for now, default 1h is enough)
         setStatus('Loading folder picker...');
         if (accessToken) {
           showFolderPicker();
@@ -125,6 +130,7 @@
     function promptFileUpload(folderId) {
       const input = document.createElement('input');
       input.type = 'file';
+      input.multiple = false; // Change to true for multi-upload, single for now
       input.onchange = async () => {
         const file = input.files[0];
         if (!file) return;
