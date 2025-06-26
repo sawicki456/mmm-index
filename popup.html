@@ -84,6 +84,7 @@
     // --- State Variables ---
     let accessToken = null;
     let pickerInited = false;
+    let driveClientLoaded = false; // NEW: Track if gapi.client.drive is loaded
     let tokenClient = null;
 
     // --- DOM Elements ---
@@ -101,19 +102,31 @@
 
     // --- Google API Loader Functions ---
     function ready(fn) {
-      if (window.google && window.google.picker && window.gapi && window.gapi.load) {
+      // Ensure all major Google API components are loaded
+      if (window.google && window.google.picker && window.gapi && window.gapi.load && window.gapi.client) {
         fn();
       } else {
         setTimeout(() => ready(fn), 100); 
       }
     }
 
+    // Loads the Google Picker API module
     function loadPickerApi() {
       gapi.load('picker', { callback: () => { pickerInited = true; } });
     }
 
-    // --- Main Initialization Logic ---
+    // Loads the Google Drive API client
+    function loadDriveClient() {
+      gapi.client.load('drive', 'v3').then(() => {
+        driveClientLoaded = true;
+      }).catch(e => {
+        setStatus(`Failed to load Drive API client: ${e.message}`, true);
+      });
+    }
+
+    // --- Main Initialization Logic (Runs when all APIs are ready) ---
     ready(() => {
+      // Initialize Google Identity Services (GIS) token client for OAuth
       tokenClient = google.accounts.oauth2.initTokenClient({
         client_id: CLIENT_ID,
         scope: SCOPE,
@@ -128,10 +141,20 @@
         },
       });
 
-      gapi.load('client', { callback: loadPickerApi });
+      // Load Google API client components
+      gapi.load('client', { callback: loadPickerApi }); // loads gapi.client base
+      gapi.load('client:drive', { callback: loadDriveClient }); // NEW: Explicitly load drive client
 
+
+      // --- Event Listeners for Buttons ---
+
+      // Upload Button: Initiates OAuth and then shows the folder picker
       uploadBtn.onclick = () => {
         setStatus('Initiating upload workflow...');
+        if (!driveClientLoaded) { // Check if Drive client is loaded before proceeding
+            setStatus('Drive API client not loaded yet. Please wait a moment and try again.', true);
+            return;
+        }
         if (accessToken) {
           showFolderPicker();
         } else {
@@ -139,14 +162,16 @@
         }
       };
 
+      // Consistency Reminder Button: Copies text to clipboard
       reminderBtn.onclick = () => {
         const REMINDER_TEXT = `Review the latest project index and files before generating art or text. Use only canonical character, location, and object references from the index. Ensure all outputs are consistent with existing assets and do not invent or change any details without explicit instruction.`;
         navigator.clipboard.writeText(REMINDER_TEXT);
         setStatus("Reminder copied to clipboard!");
       };
 
+      // Trigger Index Update Button: Calls Google Apps Script Web App
       triggerIndexBtn.onclick = () => {
-        setStatus("Index update triggered, please wait...");
+        setStatus("Triggering index update, please wait...");
         fetch(INDEX_TRIGGER_URL, { method: "POST", mode: "no-cors" }) 
           .then(() => {
             setStatus("Index update triggered successfully!");
@@ -171,7 +196,6 @@
         .setIncludeFolders(true)
         .setSelectFolderEnabled(true); 
       
-      // ADDED: View to explicitly allow creating new folders within the picker
       const createFolderView = new google.picker.DocsCreateFolderView().setParent(ROOT_FOLDER_ID);
 
       const picker = new google.picker.PickerBuilder()
@@ -179,20 +203,19 @@
         .setDeveloperKey(DEVELOPER_KEY)
         .setAppId(APP_ID)
         .addView(folderView)
-        .addView(createFolderView) // Add the create folder view
-        .setTitle('Select or Create a Folder for Upload') // Updated title
+        .addView(createFolderView) 
+        .setTitle('Select or Create a Folder for Upload') 
         .setCallback(folderPickerCallback)
         .build();
       picker.setVisible(true);
-      setStatus('Choose or create a folder for your upload.');
+      setStatus('Choose a folder for your upload.');
     }
 
     // Callback after user picks or creates a folder
     function folderPickerCallback(data) {
       if (data.action === google.picker.Action.PICKED) {
-        const folder = data.docs[0]; // This will be the selected or newly created folder
+        const folder = data.docs[0]; 
         setStatus(`Selected folder: ${folder.name}. Now pick file(s) to upload.`);
-        // Proceed to upload files to this folder
         promptFileUpload(folder.id); 
       } else if (data.action === google.picker.Action.CANCEL) {
         setStatus('Folder selection cancelled.', true);
@@ -201,6 +224,12 @@
 
     // Step 2: Prompt user to select file(s) and then handle the upload
     function promptFileUpload(folderId) {
+      // Ensure drive client is loaded before using gapi.client.drive.files
+      if (!driveClientLoaded) {
+          setStatus('Drive API client not ready for upload. Please try again.', true);
+          return;
+      }
+
       const input = document.createElement('input');
       input.type = 'file';
       input.multiple = true; 
@@ -214,13 +243,6 @@
 
         setStatus(`Uploading ${files.length} file(s) to selected folder...`);
         
-        try {
-          await gapi.client.load('drive', 'v3');
-        } catch (e) {
-          setStatus(`Failed to load Drive API client: ${e.message}`, true);
-          return;
-        }
-
         let uploadedCount = 0;
         let failedCount = 0;
         const uploadPromises = [];
@@ -234,7 +256,7 @@
           const metadata = {
             name: newName,
             parents: [folderId],
-            properties: {
+            properties: { 
               originalFileName: originalFileName 
             }
           };
