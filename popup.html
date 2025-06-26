@@ -74,6 +74,7 @@
   <img src="https://raw.githubusercontent.com/sawicki456/mmm-index/refs/heads/main/hat.png" id="hat-img" alt="Macho Hat">
   <button class="menu-btn" id="pick-folder-btn">Upload Art to Any Folder</button>
   <button class="menu-btn" id="trigger-index-btn">Trigger Index Update</button>
+  <button class="menu-btn" id="trigger-chat-analysis-btn">Analyze Chat Logs</button> <!-- NEW BUTTON -->
   <button class="menu-btn" id="reminder-btn">Copy Consistency Reminder</button>
   <div id="status"></div>
 
@@ -85,6 +86,8 @@
     const ROOT_FOLDER_ID = '135BPvCXeRAXDOEMAlenWzoicRmtn_e_7';
     const SCOPE = 'https://www.googleapis.com/auth/drive'; 
     const INDEX_TRIGGER_URL = 'https://script.google.com/macros/s/AKfycbx_ViRshOUP8y3eR-RbQDX9o2nEGvP7_vLdW_GPLnGE0cdv1jcCU9us7DxUAOO1Fc5N_w/exec';
+    // NEW: URL for your Chat Log Analyzer Apps Script Web App
+    const CHAT_ANALYSIS_TRIGGER_URL = 'YOUR_CHAT_ANALYZER_APPS_SCRIPT_URL_HERE'; 
 
     // --- State Variables ---
     let accessToken = null;
@@ -96,6 +99,7 @@
     // --- DOM Elements ---
     const uploadBtn = document.getElementById('pick-folder-btn');
     const triggerIndexBtn = document.getElementById('trigger-index-btn');
+    const triggerChatAnalysisBtn = document.getElementById('trigger-chat-analysis-btn'); // NEW ELEMENT
     const reminderBtn = document.getElementById('reminder-btn');
     const statusDiv = document.getElementById('status');
 
@@ -113,16 +117,13 @@
         setStatus("Initializing Google APIs...");
         
         try {
-            // Load core gapi client and Drive client
             await new Promise(resolve => gapi.load('client', resolve));
             await gapi.client.load('drive', 'v3');
             driveClientLoaded = true;
 
-            // Load Picker API module
             await new Promise(resolve => gapi.load('picker', resolve));
             pickerApiLoaded = true; 
 
-            // Initialize GIS token client
             tokenClient = google.accounts.oauth2.initTokenClient({
                 client_id: CLIENT_ID,
                 scope: SCOPE,
@@ -184,6 +185,22 @@
                 setStatus(`Error triggering index update: ${e.message}`, true);
               });
         };
+
+        // NEW: Event Listener for Chat Analysis Button
+        triggerChatAnalysisBtn.onclick = () => {
+            if (CHAT_ANALYSIS_TRIGGER_URL === 'YOUR_CHAT_ANALYZER_APPS_SCRIPT_URL_HERE') {
+                setStatus("ERROR: Chat Analysis URL not configured in script.", true);
+                return;
+            }
+            setStatus("Triggering chat log analysis, please wait...");
+            fetch(CHAT_ANALYSIS_TRIGGER_URL, { method: "POST", mode: "no-cors" })
+              .then(() => {
+                setStatus("Chat log analysis triggered successfully!");
+              })
+              .catch((e) => {
+                setStatus(`Error triggering chat analysis: ${e.message}`, true);
+              });
+        };
     };
 
     // --- Google Picker Functions ---
@@ -195,17 +212,16 @@
         return;
       }
 
-      // CORRECTED: Use DocsView for folders; New Folder button is implicit if user has permission
       const folderView = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
         .setParent(ROOT_FOLDER_ID)
-        .setIncludeFolders(true) // Show folders
-        .setSelectFolderEnabled(true); // Allow selecting a folder
-
+        .setIncludeFolders(true)
+        .setSelectFolderEnabled(true); 
+      
       const picker = new google.picker.PickerBuilder()
         .setOAuthToken(accessToken)
         .setDeveloperKey(DEVELOPER_KEY)
         .setAppId(APP_ID)
-        .addView(folderView) // ONLY add the folder view
+        .addView(folderView) 
         .setTitle('Select a Folder for Upload') 
         .setCallback(folderPickerCallback)
         .build();
@@ -213,7 +229,7 @@
       setStatus('Choose a folder for your upload.');
     }
 
-    // Callback after user picks a folder
+    // Callback after user picks or creates a folder
     function folderPickerCallback(data) {
       if (data.action === google.picker.Action.PICKED) {
         const folder = data.docs[0]; 
